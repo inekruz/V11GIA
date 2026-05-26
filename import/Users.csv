@@ -1,0 +1,7 @@
+﻿user_id;login;full_name;role_id;status
+1;ivanov;Иванов Илья Сергеевич;2;active
+2;smirnova;Смирнова Анна Павловна;1;active
+3;petrov;Петров Дмитрий Олегович;3;active
+4;morozova;Морозова Елена Викторовна;2;active
+5;sokolov;Соколов Артем Игоревич;1;blocked
+6;admin;Системный администратор;3;active
