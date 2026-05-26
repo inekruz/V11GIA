@@ -93,6 +93,156 @@ app.get('/api/materials', async (req, res) => {
   }
 });
 
+// только менеджер и админ
+app.post('/api/materials', requireRole(['manager', 'admin']), async (req, res) => {
+  const { name, material_type_id, measurement_unit, pack_quantity, stock_quantity, min_quantity, unit_price } = req.body;
+  
+  // Валидация
+  if (unit_price < 0) {
+    return res.status(400).json({ error: 'Цена не может быть отрицательной' });
+  }
+  if (min_quantity < 0) {
+    return res.status(400).json({ error: 'Минимальное количество не может быть отрицательным' });
+  }
+  
+  try {
+    const result = await pool.query(
+      `INSERT INTO materials (name, material_type_id, measurement_unit, pack_quantity, stock_quantity, min_quantity, unit_price)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [name, material_type_id, measurement_unit, pack_quantity, stock_quantity, min_quantity, unit_price]
+    );
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      res.status(400).json({ error: 'Материал с таким названием уже существует' });
+    } else {
+      console.error(err);
+      res.status(500).json({ error: 'Ошибка сервера' });
+    }
+  }
+});
+
+// только менеджер и админ
+app.put('/api/materials/:id', requireRole(['manager', 'admin']), async (req, res) => {
+  const { id } = req.params;
+  const { name, material_type_id, measurement_unit, pack_quantity, stock_quantity, min_quantity, unit_price } = req.body;
+  
+  if (unit_price < 0) {
+    return res.status(400).json({ error: 'Цена не может быть отрицательной' });
+  }
+  if (min_quantity < 0) {
+    return res.status(400).json({ error: 'Минимальное количество не может быть отрицательным' });
+  }
+  
+  try {
+    const result = await pool.query(
+      `UPDATE materials 
+       SET name = $1, material_type_id = $2, measurement_unit = $3, 
+           pack_quantity = $4, stock_quantity = $5, min_quantity = $6, unit_price = $7
+       WHERE material_id = $8
+       RETURNING *`,
+      [name, material_type_id, measurement_unit, pack_quantity, stock_quantity, min_quantity, unit_price, id]
+    );
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Материал не найден' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      res.status(400).json({ error: 'Материал с таким названием уже существует' });
+    } else {
+      console.error(err);
+      res.status(500).json({ error: 'Ошибка сервера' });
+    }
+  }
+});
+
+// для выпадающего списка
+app.get('/api/material-types', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT material_type_id, type_name FROM material_type ORDER BY type_name');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// для выпадающего списка поставщиков
+app.get('/api/suppliers', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT supplier_id, name FROM suppliers ORDER BY name');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// установка основного поставщика
+app.post('/api/material-suppliers', requireRole(['manager', 'admin']), async (req, res) => {
+  const { material_id, supplier_id, purchase_price, avg_delivery_days } = req.body;
+  
+  try {
+    await pool.query(
+      `INSERT INTO material_suppliers (material_id, supplier_id, purchase_price, avg_delivery_days)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (material_id, supplier_id) 
+       DO UPDATE SET purchase_price = $3, avg_delivery_days = $4`,
+      [material_id, supplier_id, purchase_price, avg_delivery_days]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// авторизация
+app.post('/api/login', async (req, res) => {
+  const { login } = req.body;
+  
+  try {
+    const userRes = await pool.query(
+      `SELECT u.user_id, u.login, u.full_name, u.status, 
+              r.role_id, r.role_name
+       FROM users u
+       JOIN roles r ON u.role_id = r.role_id
+       WHERE u.login = $1 AND u.status = 'active'`,
+      [login]
+    );
+    
+    if (userRes.rows.length === 0) {
+      return res.status(401).json({ error: 'Неверный логин или пользователь заблокирован' });
+    }
+    
+    const user = userRes.rows[0];
+    res.json({
+      user_id: user.user_id,
+      login: user.login,
+      full_name: user.full_name,
+      role_id: user.role_id,
+      role_name: user.role_name
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+// Middleware для проверки роли по числовому ID
+function requireRole(allowedRoleIds) {
+  return (req, res, next) => {
+    const userRoleId = parseInt(req.headers['x-user-role-id']);
+    if (!userRoleId || !allowedRoleIds.includes(userRoleId)) {
+      return res.status(403).json({ error: 'Недостаточно прав' });
+    }
+    next();
+  };
+}
+
 app.listen(5000, () => {
   console.log('Server run 5000');
 });
