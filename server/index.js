@@ -200,6 +200,98 @@ app.post('/api/material-suppliers', requireRole(['manager', 'admin']), async (re
   }
 });
 
+app.get('/api/materials/:id/suppliers', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const result = await pool.query(
+      `SELECT s.supplier_id, s.name, s.rating, 
+              ms.purchase_price, ms.avg_delivery_days
+       FROM material_suppliers ms
+       JOIN suppliers s ON ms.supplier_id = s.supplier_id
+       WHERE ms.material_id = $1
+       ORDER BY ms.purchase_price ASC`,
+      [id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки поставщиков' });
+  }
+});
+
+app.get('/api/materials/:id/products', async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const result = await pool.query(
+      `SELECT p.sku, p.name, mp.quantity_per_product
+       FROM material_products mp
+       JOIN products p ON mp.product_sku = p.sku
+       WHERE mp.material_id = $1
+       ORDER BY p.name`,
+      [id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка загрузки продукции' });
+  }
+});
+
+app.post('/api/calculate-product-quantity', async (req, res) => {
+  const { product_type_id, material_type_id, material_quantity, param1, param2 } = req.body;
+  
+  if (!product_type_id || !material_type_id || !material_quantity || !param1 || !param2) {
+    return res.status(400).json({ error: 'Не все параметры указаны' });
+  }
+  
+  if (material_quantity <= 0 || param1 <= 0 || param2 <= 0) {
+    return res.status(400).json({ error: 'Параметры должны быть положительными числами' });
+  }
+  
+  try {
+    const productTypeRes = await pool.query(
+      'SELECT coefficient FROM product_type WHERE product_type_id = $1',
+      [product_type_id]
+    );
+    
+    const materialTypeRes = await pool.query(
+      'SELECT loss_percent FROM material_type WHERE material_type_id = $1',
+      [material_type_id]
+    );
+    
+    if (productTypeRes.rows.length === 0 || materialTypeRes.rows.length === 0) {
+      return res.json(-1);
+    }
+    
+    const productCoefficient = parseFloat(productTypeRes.rows[0].coefficient);
+    const lossPercent = parseFloat(materialTypeRes.rows[0].loss_percent);
+    
+    const materialPerUnit = param1 * param2 * productCoefficient;
+    
+    const materialWithLoss = materialPerUnit * (1 + lossPercent / 100);
+    
+    const productQuantity = Math.floor(material_quantity / materialWithLoss);
+    
+    res.json(productQuantity);
+    
+  } catch (err) {
+    console.error(err);
+    res.json(-1);
+  }
+});
+
+app.get('/api/product-types', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT product_type_id, type_name, coefficient FROM product_type ORDER BY type_name');
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
 // авторизация
 app.post('/api/login', async (req, res) => {
   const { login } = req.body;

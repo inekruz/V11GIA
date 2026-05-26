@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import './App.css';
 
-// компонент авторизации
+// Компонент авторизации
 function Login({ onLogin }) {
   const [login, setLogin] = useState('');
   const [error, setError] = useState('');
@@ -64,7 +64,7 @@ function SupplierList({ material, user, onBack }) {
 
   useEffect(() => {
     loadSuppliers();
-  }, [material.material_id]);
+  }, [material]);
 
   const loadSuppliers = async () => {
     try {
@@ -83,11 +83,21 @@ function SupplierList({ material, user, onBack }) {
 
   const getRatingStars = (rating) => {
     if (!rating) return 'Нет рейтинга';
-    return '★'.repeat(rating) + '☆'.repeat(10 - rating);
+    const numRating = parseInt(rating);
+    if (isNaN(numRating)) return 'Нет рейтинга';
+    return '★'.repeat(numRating) + '☆'.repeat(10 - numRating);
+  };
+
+  // Безопасное форматирование цены
+  const formatPrice = (price) => {
+    if (price === undefined || price === null) return '0.00';
+    const num = parseFloat(price);
+    if (isNaN(num)) return '0.00';
+    return num.toFixed(2);
   };
 
   if (loading) return <div className="loading">Загрузка поставщиков...</div>;
-  if (error) return <div className="error">{error}</div>;
+  if (error) return <div className="error-message">{error}</div>;
 
   return (
     <div className="modal-overlay" onClick={onBack}>
@@ -96,7 +106,6 @@ function SupplierList({ material, user, onBack }) {
           <h2>Поставщики материала: {material.name}</h2>
           <button onClick={onBack} className="close-btn">×</button>
         </div>
-        
         <div className="modal-body">
           {suppliers.length === 0 ? (
             <p className="no-data">Нет данных о поставщиках для этого материала</p>
@@ -115,8 +124,8 @@ function SupplierList({ material, user, onBack }) {
                   <tr key={s.supplier_id}>
                     <td>{s.name}</td>
                     <td className="rating">{getRatingStars(s.rating)}</td>
-                    <td>{s.purchase_price.toFixed(2)}</td>
-                    <td>{s.avg_delivery_days}</td>
+                    <td>{formatPrice(s.purchase_price)}</td>
+                    <td>{s.avg_delivery_days || 0}</td>
                   </tr>
                 ))}
               </tbody>
@@ -136,7 +145,7 @@ function ProductList({ material, user, onBack }) {
 
   useEffect(() => {
     loadProducts();
-  }, [material.material_id]);
+  }, [material]);
 
   const loadProducts = async () => {
     try {
@@ -153,8 +162,15 @@ function ProductList({ material, user, onBack }) {
     }
   };
 
+  const formatQuantity = (qty) => {
+    if (qty === undefined || qty === null) return '0.000';
+    const num = parseFloat(qty);
+    if (isNaN(num)) return '0.000';
+    return num.toFixed(3);
+  };
+
   if (loading) return <div className="loading">Загрузка продукции...</div>;
-  if (error) return <div className="error">{error}</div>;
+  if (error) return <div className="error-message">{error}</div>;
 
   return (
     <div className="modal-overlay" onClick={onBack}>
@@ -163,7 +179,6 @@ function ProductList({ material, user, onBack }) {
           <h2>Продукция с использованием материала: {material.name}</h2>
           <button onClick={onBack} className="close-btn">×</button>
         </div>
-        
         <div className="modal-body">
           {products.length === 0 ? (
             <p className="no-data">Нет данных о продукции для этого материала</p>
@@ -181,7 +196,7 @@ function ProductList({ material, user, onBack }) {
                   <tr key={p.sku}>
                     <td>{p.sku}</td>
                     <td>{p.name}</td>
-                    <td>{parseFloat(p.quantity_per_product).toFixed(3)}</td>
+                    <td>{formatQuantity(p.quantity_per_product)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -242,16 +257,22 @@ function MaterialsList({ user, onLogout }) {
     setShowProducts(true);
   };
 
+  const formatPrice = (price) => {
+    if (price === undefined || price === null) return '0.00';
+    const num = parseFloat(price);
+    if (isNaN(num)) return '0.00';
+    return num.toFixed(2);
+  };
+
   const canEdit = user?.role_id === 2 || user?.role_id === 3;
-  const canView = user?.role_id >= 1;
 
   if (loading) return <div className="loading">Загрузка...</div>;
-  if (error) return <div className="error">{error}</div>;
-  if (!canView) return <div className="error">Нет прав доступа</div>;
+  if (error) return <div className="error-message">{error}</div>;
 
   return (
     <div className="app">
       <div className="header">
+        <h1>AUTO PARK</h1>
         <div className="header-info">
           <span className="user-name">{user?.full_name} ({user?.role_name})</span>
           <button onClick={onLogout} className="logout-btn">Выйти</button>
@@ -283,9 +304,9 @@ function MaterialsList({ user, onLogout }) {
                 <p>На складе: {m.stock_quantity} {m.measurement_unit}</p>
                 <p>Минимум: {m.min_quantity} {m.measurement_unit}</p>
                 <p>В упаковке: {m.pack_quantity} {m.measurement_unit}</p>
-                <p className="cost">Стоимость партии: {m.min_order_cost?.toFixed(2) || '0'} ₽</p>
+                <p className="cost">Стоимость партии: {formatPrice(m.min_order_cost)} ₽</p>
                 {m.main_supplier_price && (
-                  <p className="supplier">Закупочная цена: {m.main_supplier_price} ₽</p>
+                  <p className="supplier">Закупочная цена: {formatPrice(m.main_supplier_price)} ₽</p>
                 )}
               </div>
             </div>
